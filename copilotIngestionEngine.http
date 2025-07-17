@@ -1,0 +1,52 @@
+### Health Check
+GET https://localhost:7019/health
+
+### Ingest Documents - Valid Request
+POST https://localhost:7019/api/ingest
+Content-Type: application/json
+X-API-Key: your-secret-api-key-here
+
+{
+  "documents": [
+    {
+      "id": "doc1",
+      "title": "Sample Document 1",
+      "content": "This is the content of the first document",
+      "author": "John Doe",
+      "category": "Technology",
+      "tags": ["sample", "document", "test"]
+    },
+    {
+      "id": "doc2", 
+      "title": "Sample Document 2",
+      "content": "This is the content of the second document",
+      "author": "Jane Smith",
+      "category": "Business",
+      "tags": ["sample", "document", "business"]
+    }
+  ]
+}
+
+### Ingest Documents - Invalid API Key
+POST https://localhost:7019/api/ingest
+Content-Type: application/json
+X-API-Key: invalid-key
+
+{
+  "documents": [
+    {
+      "id": "doc1",
+      "title": "Sample Document",
+      "content": "This should fail due to invalid API key"
+    }
+  ]
+}
+
+### Ingest Documents - Empty Request
+POST https://localhost:7019/api/ingest
+Content-Type: application/json
+X-API-Key: your-secret-api-key-here
+
+{
+  "documents": []
+}
