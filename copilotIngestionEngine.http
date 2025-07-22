@@ -1,52 +1,113 @@
 ### Health Check
-GET https://localhost:7019/health
+GET https://localhost:5076/health
 
 ### Ingest Documents - Valid Request
-POST https://localhost:7019/api/ingest
+POST http://localhost:5076/api/ingest
 Content-Type: application/json
-X-API-Key: your-secret-api-key-here
+X-Authentication: {"clientId": "your-client-id", "clientSecret": "your-client-secret", "tenantId": "your-tenant-id", "connectionId": "copilot-connector-id"}
 
 {
   "documents": [
-    {
-      "id": "doc1",
-      "title": "Sample Document 1",
-      "content": "This is the content of the first document",
-      "author": "John Doe",
-      "category": "Technology",
-      "tags": ["sample", "document", "test"]
-    },
-    {
-      "id": "doc2", 
-      "title": "Sample Document 2",
-      "content": "This is the content of the second document",
-      "author": "Jane Smith",
-      "category": "Business",
-      "tags": ["sample", "document", "business"]
-    }
+	{
+		"FILM": "Avengers: Age of Ultron (2015)",
+		"IMDB": "7.8",
+		"RT_norm": "3.7",
+		"IMDB_norm": "3.9",
+		"Metacritic": "66",
+		"RT_user_norm": "4.3",
+		"RT_norm_round": "3.5",
+		"Fandango_Stars": "5",
+		"Fandango_votes": "14846",
+		"RottenTomatoes": "74",
+		"IMDB_norm_round": "4",
+		"Metacritic_User": "7.1",
+		"Metacritic_norm": "3.3",
+		"RT_user_norm_round": "4.5",
+		"Fandango_Difference": "0.5",
+		"Metacritic_user_nom": "3.55",
+		"RottenTomatoes_User": "86",
+		"Fandango_Ratingvalue": "4.5",
+		"IMDB_user_vote_count": "271107",
+		"Metacritic_norm_round": "3.5",
+		"Metacritic_user_norm_round": "3.5",
+		"Metacritic_user_vote_count": "1330"
+	},
+	{
+		"FILM": "Cinderella (2015)",
+		"IMDB": "7.1",
+		"RT_norm": "4.25",
+		"IMDB_norm": "3.55",
+		"Metacritic": "67",
+		"RT_user_norm": "4",
+		"RT_norm_round": "4.5",
+		"Fandango_Stars": "5",
+		"Fandango_votes": "12640",
+		"RottenTomatoes": "85",
+		"IMDB_norm_round": "3.5",
+		"Metacritic_User": "7.5",
+		"Metacritic_norm": "3.35",
+		"RT_user_norm_round": "4",
+		"Fandango_Difference": "0.5",
+		"Metacritic_user_nom": "3.75",
+		"RottenTomatoes_User": "80",
+		"Fandango_Ratingvalue": "4.5",
+		"IMDB_user_vote_count": "65709",
+		"Metacritic_norm_round": "3.5",
+		"Metacritic_user_norm_round": "4",
+		"Metacritic_user_vote_count": "249"
+	}
   ]
 }
 
-### Ingest Documents - Invalid API Key
-POST https://localhost:7019/api/ingest
+### Ingest Documents - Invalid Authentication (Missing Fields)
+POST https://localhost:5076/api/ingest
 Content-Type: application/json
-X-API-Key: invalid-key
+X-Authentication: {"clientId": "incomplete-auth"}
 
 {
   "documents": [
     {
       "id": "doc1",
       "title": "Sample Document",
-      "content": "This should fail due to invalid API key"
+      "content": "This should fail due to incomplete authentication"
+    }
+  ]
+}
+
+### Ingest Documents - Invalid Authentication (Malformed JSON)
+POST https://localhost:5076/api/ingest
+Content-Type: application/json
+X-Authentication: {invalid-json}
+
+{
+  "documents": [
+    {
+      "id": "doc1",
+      "title": "Sample Document",
+      "content": "This should fail due to malformed JSON in header"
     }
   ]
 }
 
 ### Ingest Documents - Empty Request
-POST https://localhost:7019/api/ingest
+POST https://localhost:5076/api/ingest
 Content-Type: application/json
-X-API-Key: your-secret-api-key-here
+X-Authentication: {"clientId": "your-client-id", "clientSecret": "your-client-secret", "tenantId": "your-tenant-id", "connectionId": "copilot-connector-id"}
 
 {
   "documents": []
+}
+
+### Ingest Documents - No Authentication Header
+POST https://localhost:5076/api/ingest
+Content-Type: application/json
+
+{
+  "documents": [
+    {
+      "id": "doc1",
+      "title": "Sample Document",
+      "content": "This should fail due to missing authentication header"
+    }
+  ]
 }

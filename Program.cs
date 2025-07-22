@@ -41,15 +41,38 @@ if (!app.Environment.IsDevelopment())
 // Minimal API endpoint for document ingestion
 app.MapPost("/api/ingest", async (
     [FromBody] IngestionRequest request,
-    [FromHeader(Name = "X-API-Key")] string? apiKey,
+    [FromHeader(Name = "X-Authentication")] string? authHeader,
     IApiKeyValidationService apiKeyService,
     IGraphIngestionService graphService,
     ILogger<Program> logger) =>
 {
-    // Validate API key
-    if (!await apiKeyService.ValidateApiKeyAsync(apiKey))
+    // Parse authentication JSON from header
+    AuthenticationRequest? authRequest = null;
+    if (!string.IsNullOrEmpty(authHeader))
     {
-        logger.LogWarning("Invalid API key provided");
+        try
+        {
+            authRequest = JsonSerializer.Deserialize<AuthenticationRequest>(authHeader, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning("Invalid JSON in authentication header: {Message}", ex.Message);
+            return Results.BadRequest(new IngestionResponse(
+                false,
+                "Invalid authentication header format",
+                0,
+                new[] { "Authentication header must be valid JSON with clientId, clientSecret, tenantId, and connectionId" }
+            ));
+        }
+    }
+
+    // Validate authentication
+    if (!await apiKeyService.ValidateAuthenticationAsync(authRequest))
+    {
+        logger.LogWarning("Authentication validation failed");
         return Results.Unauthorized();
     }
 
@@ -72,7 +95,7 @@ app.MapPost("/api/ingest", async (
         //var (success, errors) = await graphService.IngestDocumentsAsync(request.Documents);
 
         //batch processing
-        var (success, errors) = await graphService.IngestDocumentsBatchAsync(request.Documents);
+        var (success, errors) = await graphService.IngestDocumentsBatchAsync(request.Documents, authRequest!);
         
         var response = new IngestionResponse(
             success,
@@ -98,7 +121,7 @@ app.MapPost("/api/ingest", async (
 })
 .WithName("IngestDocuments")
 .WithSummary("Ingest JSON documents into Microsoft Graph")
-.WithDescription("Accepts an array of JSON documents and ingests them into Microsoft Graph as ExternalItems")
+.WithDescription("Accepts an array of JSON documents and ingests them into Microsoft Graph as ExternalItems. Requires X-Authentication header with JSON containing clientId, clientSecret, tenantId, and connectionId.")
 .WithOpenApi();
 
 // Health check endpoint

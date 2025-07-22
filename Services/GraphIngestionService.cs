@@ -2,6 +2,7 @@ using Microsoft.Graph;
 using Microsoft.Graph.Models.ExternalConnectors;
 using Azure.Identity;
 using copilotIngestionEngine.Configuration;
+using copilotIngestionEngine.Models;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 
@@ -9,34 +10,25 @@ namespace copilotIngestionEngine.Services;
 
 public interface IGraphIngestionService
 {
-    Task<(bool Success, string[] Errors)> IngestDocumentsAsync(JsonDocument[] documents);
-    Task<(bool Success, string[] Errors)> IngestDocumentsBatchAsync(JsonDocument[] documents);
+    Task<(bool Success, string[] Errors)> IngestDocumentsAsync(JsonDocument[] documents, AuthenticationRequest authRequest);
+    Task<(bool Success, string[] Errors)> IngestDocumentsBatchAsync(JsonDocument[] documents, AuthenticationRequest authRequest);
 }
 
 public class GraphIngestionService : IGraphIngestionService
 {
-    private readonly GraphServiceClient _graphServiceClient;
-    private readonly MicrosoftGraphOptions _graphOptions;
     private readonly ILogger<GraphIngestionService> _logger;
     private const int BatchSize = 20; // Microsoft Graph batch limit
 
-    public GraphIngestionService(IOptions<MicrosoftGraphOptions> graphOptions, ILogger<GraphIngestionService> logger)
+    public GraphIngestionService(ILogger<GraphIngestionService> logger)
     {
-        _graphOptions = graphOptions.Value;
         _logger = logger;
-
-        var credential = new ClientSecretCredential(
-            _graphOptions.TenantId,
-            _graphOptions.ClientId,
-            _graphOptions.ClientSecret);
-
-        _graphServiceClient = new GraphServiceClient(credential);
     }
 
-    public async Task<(bool Success, string[] Errors)> IngestDocumentsAsync(JsonDocument[] documents)
+    public async Task<(bool Success, string[] Errors)> IngestDocumentsAsync(JsonDocument[] documents, AuthenticationRequest authRequest)
     {
         var errors = new List<string>();
         var successCount = 0;
+        var graphServiceClient = CreateGraphServiceClient(authRequest);
 
         foreach (var (document, index) in documents.Select((doc, i) => (doc, i)))
         {
@@ -44,7 +36,7 @@ public class GraphIngestionService : IGraphIngestionService
             {
                 var externalItem = CreateExternalItem(document, index);
                 
-                await _graphServiceClient.External.Connections[_graphOptions.ConnectionId]
+                await graphServiceClient.External.Connections[authRequest.ConnectionId]
                     .Items[externalItem.Id]
                     .PutAsync(externalItem);
 
@@ -62,7 +54,7 @@ public class GraphIngestionService : IGraphIngestionService
         return (successCount == documents.Length, errors.ToArray());
     }
 
-    public async Task<(bool Success, string[] Errors)> IngestDocumentsBatchAsync(JsonDocument[] documents)
+    public async Task<(bool Success, string[] Errors)> IngestDocumentsBatchAsync(JsonDocument[] documents, AuthenticationRequest authRequest)
     {
         var errors = new List<string>();
         var successCount = 0;
@@ -71,7 +63,7 @@ public class GraphIngestionService : IGraphIngestionService
         for (int i = 0; i < documents.Length; i += BatchSize)
         {
             var batch = documents.Skip(i).Take(BatchSize).ToArray();
-            var (batchSuccessCount, batchErrors) = await ProcessBatchAsync(batch, i);
+            var (batchSuccessCount, batchErrors) = await ProcessBatchAsync(batch, i, authRequest);
             
             successCount += batchSuccessCount;
             errors.AddRange(batchErrors);
@@ -80,14 +72,25 @@ public class GraphIngestionService : IGraphIngestionService
         return (successCount == documents.Length, errors.ToArray());
     }
 
-    private async Task<(int SuccessCount, List<string> Errors)> ProcessBatchAsync(JsonDocument[] documents, int batchStartIndex)
+    private GraphServiceClient CreateGraphServiceClient(AuthenticationRequest authRequest)
+    {
+        var credential = new ClientSecretCredential(
+            authRequest.TenantId,
+            authRequest.ClientId,
+            authRequest.ClientSecret);
+
+        return new GraphServiceClient(credential);
+    }
+
+    private async Task<(int SuccessCount, List<string> Errors)> ProcessBatchAsync(JsonDocument[] documents, int batchStartIndex, AuthenticationRequest authRequest)
     {
         var errors = new List<string>();
         var successCount = 0;
 
         try
         {
-            var batchRequestContent = new BatchRequestContentCollection(_graphServiceClient);
+            var graphServiceClient = CreateGraphServiceClient(authRequest);
+            var batchRequestContent = new BatchRequestContentCollection(graphServiceClient);
             var requestIds = new List<string>();
 
             // Create batch requests
@@ -97,17 +100,17 @@ public class GraphIngestionService : IGraphIngestionService
                 var documentIndex = batchStartIndex + i;
                 var externalItem = CreateExternalItem(document, documentIndex);
                 
-                var requestUrl = $"/external/connections/{_graphOptions.ConnectionId}/items/{externalItem.Id}";
+                var requestUrl = $"/external/connections/{authRequest.ConnectionId}/items/{externalItem.Id}";
                 var requestInfo = new Microsoft.Kiota.Abstractions.RequestInformation
                 {
                     HttpMethod = Microsoft.Kiota.Abstractions.Method.PUT,
                     URI = new Uri("https://graph.microsoft.com/v1.0" + requestUrl),
                 };
                 requestInfo.Headers.Add("Content-Type", "application/json");
-                requestInfo.SetContentFromParsable(_graphServiceClient.RequestAdapter, "application/json", externalItem);
+                requestInfo.SetContentFromParsable(graphServiceClient.RequestAdapter, "application/json", externalItem);
 
                 // Convert RequestInformation to HttpRequestMessage
-                var httpRequestMessage = await _graphServiceClient.RequestAdapter.ConvertToNativeRequestAsync<System.Net.Http.HttpRequestMessage>(requestInfo);
+                var httpRequestMessage = await graphServiceClient.RequestAdapter.ConvertToNativeRequestAsync<System.Net.Http.HttpRequestMessage>(requestInfo);
 
                 var batchStepId = Guid.NewGuid().ToString();
                 var batchStep = new Microsoft.Graph.BatchRequestStep(
@@ -124,7 +127,7 @@ public class GraphIngestionService : IGraphIngestionService
 
             // Execute batch request
             _logger.LogInformation("Executing batch request with {Count} documents", documents.Length);
-            var batchResponse = await _graphServiceClient.Batch.PostAsync(batchRequestContent);
+            var batchResponse = await graphServiceClient.Batch.PostAsync(batchRequestContent);
 
             // Process batch responses
             for (int i = 0; i < requestIds.Count; i++)
